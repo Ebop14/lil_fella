@@ -6,6 +6,7 @@ import SwiftUI
 final class ChatViewModel {
     private let llamaService: LlamaService
     private let memoryStore: MemoryStore
+    private let conversationStore: ConversationStore
     private let buddy: BuddyIdentity
 
     private(set) var messages: [ChatMessage] = []
@@ -25,14 +26,19 @@ final class ChatViewModel {
     /// Raw streamed tokens including <think> blocks; displayed text has them stripped
     private var rawStreamBuffer = ""
 
-    init(llamaService: LlamaService, memoryStore: MemoryStore, buddy: BuddyIdentity) {
+    init(llamaService: LlamaService, memoryStore: MemoryStore, conversationStore: ConversationStore, buddy: BuddyIdentity) {
         self.llamaService = llamaService
         self.memoryStore = memoryStore
+        self.conversationStore = conversationStore
         self.buddy = buddy
     }
 
-    func loadMemories() async {
+    func loadPersistedState() async {
         memories = await memoryStore.load()
+        let saved = await conversationStore.load()
+        if !saved.isEmpty {
+            messages = saved
+        }
     }
 
     func send() {
@@ -83,6 +89,7 @@ final class ChatViewModel {
 
             // Clear KV cache for next turn (we re-encode full context each time)
             await llamaService.clearContext()
+            await conversationStore.save(messages)
         }
     }
 
@@ -102,6 +109,8 @@ final class ChatViewModel {
         rawStreamBuffer = ""
         isGenerating = false
         generateTask = nil
+
+        Task { await conversationStore.save(messages) }
     }
 
     func clearConversation() {
@@ -119,6 +128,7 @@ final class ChatViewModel {
 
         Task {
             await llamaService.clearContext()
+            await conversationStore.clear()
         }
     }
 

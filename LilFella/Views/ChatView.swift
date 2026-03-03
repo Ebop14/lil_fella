@@ -33,9 +33,10 @@ struct ChatView: View {
             let vm = ChatViewModel(
                 llamaService: appState.llamaService,
                 memoryStore: appState.memoryStore,
+                conversationStore: appState.conversationStore,
                 buddy: appState.buddy
             )
-            await vm.loadMemories()
+            await vm.loadPersistedState()
             viewModel = vm
         }
     }

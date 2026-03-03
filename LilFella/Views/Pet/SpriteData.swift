@@ -64,9 +64,9 @@ enum SpriteFrames {
         [n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n],  // 15
     ])
 
-    // ── Thinking Frame 1 (eyes look up, one dot above) ──
+    // ── Thinking Frame 1 (eyes look up) ──
     static let thinking1 = SpriteFrame(pixels: [
-        [n, n, n, n, n, n, n, n, n, X, n, n, n, n, n, n, n, n, n, n],  // 0  dot
+        [n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n],  // 0
         [n, n, n, n, D, D, L, L, M, M, M, M, L, L, D, D, n, n, n, n],  // 1
         [n, n, n, D, L, L, M, M, M, M, M, M, M, M, L, L, D, n, n, n],  // 2
         [n, n, D, L, M, M, M, M, M, M, M, M, M, M, M, M, L, D, n, n],  // 3
@@ -84,9 +84,9 @@ enum SpriteFrames {
         [n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n],  // 15
     ])
 
-    // ── Thinking Frame 2 (eyes look up, two dots above) ──
+    // ── Thinking Frame 2 (eyes look up) ──
     static let thinking2 = SpriteFrame(pixels: [
-        [n, n, n, n, n, n, n, n, X, n, X, n, n, n, n, n, n, n, n, n],  // 0  two dots
+        [n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n, n],  // 0
         [n, n, n, n, D, D, L, L, M, M, M, M, L, L, D, D, n, n, n, n],  // 1
         [n, n, n, D, L, L, M, M, M, M, M, M, M, M, L, L, D, n, n, n],  // 2
         [n, n, D, L, M, M, M, M, M, M, M, M, M, M, M, M, L, D, n, n],  // 3

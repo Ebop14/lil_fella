@@ -8,6 +8,7 @@ final class AppState {
     let llamaService = LlamaService()
     let modelManager = ModelManager()
     let memoryStore = MemoryStore()
+    let conversationStore = ConversationStore()
     let buddy = BuddyIdentity.defaultBuddy
 
     private(set) var isModelLoaded = false

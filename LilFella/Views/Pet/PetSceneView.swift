@@ -16,13 +16,14 @@ struct PetSceneView: View {
                     updateAnimationState(generating: viewModel.isGenerating, text: text)
                 }
                 .task {
-                    await viewModel.loadMemories()
+                    await viewModel.loadPersistedState()
                 }
         } else {
             Color.clear.onAppear {
                 viewModel = ChatViewModel(
                     llamaService: appState.llamaService,
                     memoryStore: appState.memoryStore,
+                    conversationStore: appState.conversationStore,
                     buddy: appState.buddy
                 )
             }
@@ -42,14 +43,20 @@ struct PetSceneView: View {
                 ZStack(alignment: .bottom) {
                     PixelEnvironmentView(screenHeight: geo.size.height)
 
-                    // Character sitting on grass
-                    TimelineView(.periodic(from: .now, by: animationState.state.interval)) { _ in
-                        PixelCharacterView(
-                            frame: animationState.currentFrame,
-                            pixelSize: pixelSize(for: geo.size)
-                        )
-                        .onAppear {
-                            animationState.advance()
+                    // Character + thinking dots
+                    VStack(spacing: 0) {
+                        if animationState.state == .thinking {
+                            ThinkingDotsView(pixelSize: pixelSize(for: geo.size))
+                        }
+
+                        TimelineView(.periodic(from: .now, by: animationState.state.interval)) { _ in
+                            PixelCharacterView(
+                                frame: animationState.currentFrame,
+                                pixelSize: pixelSize(for: geo.size)
+                            )
+                            .onAppear {
+                                animationState.advance()
+                            }
                         }
                     }
                     .padding(.bottom, geo.size.height * 0.025)
