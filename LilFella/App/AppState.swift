@@ -16,6 +16,8 @@ final class AppState {
 
     var inferenceConfig = InferenceConfig()
 
+    private static let lastModelKey = "lastLoadedModelID"
+
     nonisolated(unsafe) private var memoryWarningObserver: (any NSObjectProtocol)?
 
     init() {
@@ -79,6 +81,7 @@ final class AppState {
         do {
             try await llamaService.loadModel(from: localModel.fileURL, config: inferenceConfig)
             isModelLoaded = true
+            UserDefaults.standard.set(localModel.definition.id, forKey: Self.lastModelKey)
         } catch {
             errorMessage = "Failed to load model: \(error.localizedDescription)"
         }
@@ -89,6 +92,15 @@ final class AppState {
     func unloadModel() async {
         await llamaService.unloadModel()
         isModelLoaded = false
+    }
+
+    func autoLoadLastModel() async {
+        guard !isModelLoaded, !isLoadingModel else { return }
+        guard let lastID = UserDefaults.standard.string(forKey: Self.lastModelKey),
+              let localModel = modelManager.downloadedModels.first(where: { $0.definition.id == lastID }) else {
+            return
+        }
+        await loadModel(localModel)
     }
 
     func clearError() {

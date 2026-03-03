@@ -18,6 +18,9 @@ struct ContentView: View {
                 errorView(message)
             }
         }
+        .task {
+            await appState.autoLoadLastModel()
+        }
     }
 
     private func errorView(_ message: String) -> some View {

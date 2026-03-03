@@ -13,5 +13,11 @@ struct InferenceConfig: Sendable {
         return -1 // all layers on GPU
         #endif
     }()
-    var flashAttention: Bool = true
+    var flashAttention: Bool = {
+        #if targetEnvironment(simulator)
+        return false
+        #else
+        return true
+        #endif
+    }()
 }
