@@ -5,6 +5,7 @@ struct SettingsView: View {
     @State private var sampling = SamplingConfig()
     @State private var inference = InferenceConfig()
     @State private var showMemories = false
+    @State private var showLicenses = false
 
     var body: some View {
         Form {
@@ -50,6 +51,12 @@ struct SettingsView: View {
             }
 
             Section {
+                Button("Acknowledgements") {
+                    showLicenses = true
+                }
+            }
+
+            Section {
                 Button("Unload Model", role: .destructive) {
                     Task { await appState.unloadModel() }
                 }
@@ -58,6 +65,9 @@ struct SettingsView: View {
         .navigationTitle("Settings")
         .sheet(isPresented: $showMemories) {
             MemoriesView(memoryStore: appState.memoryStore)
+        }
+        .sheet(isPresented: $showLicenses) {
+            LicensesView()
         }
     }
 }
