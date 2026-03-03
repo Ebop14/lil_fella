@@ -13,10 +13,17 @@ final class ChatViewModel {
     private(set) var currentStreamedText = ""
     private(set) var tokensPerSecond: Double = 0
     var inputText = ""
-    var samplingConfig = SamplingConfig()
+    private let samplingConfig = SamplingConfig()
+
+    /// The latest assistant message text, for display in the dialogue box.
+    var latestBuddyText: String? {
+        messages.last(where: { $0.role == .assistant })?.content
+    }
 
     private var generateTask: Task<Void, Never>?
     private var memories: [String] = []
+    /// Raw streamed tokens including <think> blocks; displayed text has them stripped
+    private var rawStreamBuffer = ""
 
     init(llamaService: LlamaService, memoryStore: MemoryStore, buddy: BuddyIdentity) {
         self.llamaService = llamaService
@@ -38,6 +45,7 @@ final class ChatViewModel {
 
         isGenerating = true
         currentStreamedText = ""
+        rawStreamBuffer = ""
         tokensPerSecond = 0
 
         generateTask = Task {
@@ -52,7 +60,8 @@ final class ChatViewModel {
 
             let stream = await llamaService.generate(prompt: prompt, sampling: samplingConfig)
             for await chunk in stream {
-                currentStreamedText += chunk
+                rawStreamBuffer += chunk
+                currentStreamedText = Self.stripThinkTags(rawStreamBuffer)
                 tokenCount += 1
 
                 let elapsed = Date().timeIntervalSince(startTime)
@@ -61,12 +70,14 @@ final class ChatViewModel {
                 }
             }
 
-            if !currentStreamedText.isEmpty {
-                let assistantMessage = ChatMessage(role: .assistant, content: currentStreamedText)
+            let finalText = Self.stripThinkTags(rawStreamBuffer)
+            if !finalText.isEmpty {
+                let assistantMessage = ChatMessage(role: .assistant, content: finalText)
                 messages.append(assistantMessage)
             }
 
             currentStreamedText = ""
+            rawStreamBuffer = ""
             isGenerating = false
             generateTask = nil
 
@@ -81,12 +92,14 @@ final class ChatViewModel {
         }
         generateTask?.cancel()
 
-        if !currentStreamedText.isEmpty {
-            let partial = ChatMessage(role: .assistant, content: currentStreamedText)
+        let finalText = Self.stripThinkTags(rawStreamBuffer)
+        if !finalText.isEmpty {
+            let partial = ChatMessage(role: .assistant, content: finalText)
             messages.append(partial)
         }
 
         currentStreamedText = ""
+        rawStreamBuffer = ""
         isGenerating = false
         generateTask = nil
     }
@@ -147,6 +160,24 @@ final class ChatViewModel {
 
         await memoryStore.merge(newFacts: facts)
         memories = await memoryStore.currentFacts()
+
+        let factList = facts.joined(separator: ", ")
+        messages.append(ChatMessage(role: .system, content: "Memory updated: \(factList)"))
+    }
+
+    /// Strips `<think>...</think>` blocks (including incomplete ones still streaming)
+    static func stripThinkTags(_ text: String) -> String {
+        // Remove complete <think>...</think> blocks
+        var result = text.replacingOccurrences(
+            of: "<think>[\\s\\S]*?</think>",
+            with: "",
+            options: .regularExpression
+        )
+        // Remove incomplete <think>... at the end (still streaming)
+        if let range = result.range(of: "<think>[\\s\\S]*$", options: .regularExpression) {
+            result.removeSubrange(range)
+        }
+        return result.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func parseFactsJSON(_ text: String) -> [String]? {

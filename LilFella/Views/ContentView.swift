@@ -13,7 +13,7 @@ struct ContentView: View {
             case .loading:
                 ProgressView("Loading model...")
             case .ready:
-                ChatView()
+                PetSceneView()
             case .error(let message):
                 errorView(message)
             }
