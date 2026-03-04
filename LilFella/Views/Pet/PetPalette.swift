@@ -25,4 +25,10 @@ enum PetPalette {
     static let textColor = Color(red: 0.95, green: 0.93, blue: 0.85)
     static let nameplateBg = Color(red: 0.08, green: 0.08, blue: 0.22)
     static let dimText = Color(red: 0.75, green: 0.72, blue: 0.62)
+
+    // Game board
+    static let gameGrid = Color(red: 0.85, green: 0.70, blue: 0.30)
+    static let gameX = Color(red: 0.90, green: 0.35, blue: 0.30)
+    static let gameO = Color(red: 0.55, green: 0.85, blue: 0.55)
+    static let winHighlight = Color(red: 0.90, green: 0.75, blue: 0.30).opacity(0.35)
 }

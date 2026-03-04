@@ -17,6 +17,12 @@ struct BuddyIdentity: Sendable {
             parts.append("Rules: \(constraints.joined(separator: ". ")).")
         }
 
+        parts.append("")
+        parts.append("Tools available:")
+        parts.append("- save_memory: When you learn something important about your human, save it.")
+        parts.append("  Format: <tool>save_memory[\"fact1\", \"fact2\"]</tool>")
+        parts.append("  Only save genuinely important new facts. Do not re-save things you already remember.")
+
         if !memories.isEmpty {
             parts.append("")
             parts.append("Things you remember about your human:")

@@ -3,6 +3,7 @@ import SwiftUI
 struct DialogueBoxView: View {
     @Bindable var viewModel: ChatViewModel
     let screenSize: CGSize
+    var onNewChat: (() -> Void)?
     @FocusState private var isInputFocused: Bool
 
     @State private var isInputMode = false
@@ -56,25 +57,37 @@ struct DialogueBoxView: View {
 
     // MARK: - Nameplate
 
+    private var nameplateFontSize: CGFloat { screenSize.width * 0.038 }
+
     private var nameplate: some View {
         HStack {
-            Text(nameplateText)
-                .font(.system(size: labelFontSize, weight: .bold, design: .monospaced))
-                .foregroundStyle(PetPalette.borderOuter)
-                .padding(.horizontal, screenSize.width * 0.025)
-                .padding(.vertical, screenSize.height * 0.003)
-                .background(
-                    RoundedRectangle(cornerRadius: cornerRadius * 0.7)
-                        .fill(PetPalette.nameplateBg)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: cornerRadius * 0.7)
-                                .stroke(PetPalette.borderOuter, lineWidth: borderOuter * 0.7)
-                        )
-                )
-                .offset(y: screenSize.height * 0.007)
+            nameplatePill(nameplateText)
             Spacer()
+            if let onNewChat {
+                Button(action: onNewChat) {
+                    nameplatePill("New")
+                }
+            }
         }
         .padding(.leading, contentPadH)
+        .padding(.trailing, contentPadH)
+    }
+
+    private func nameplatePill(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: nameplateFontSize, weight: .bold, design: .monospaced))
+            .foregroundStyle(PetPalette.borderOuter)
+            .padding(.horizontal, screenSize.width * 0.03)
+            .padding(.vertical, screenSize.height * 0.004)
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius * 0.7)
+                    .fill(PetPalette.nameplateBg)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: cornerRadius * 0.7)
+                            .stroke(PetPalette.borderOuter, lineWidth: borderOuter * 0.7)
+                    )
+            )
+            .offset(y: screenSize.height * 0.007)
     }
 
     private var nameplateText: String {
@@ -173,7 +186,17 @@ struct DialogueBoxView: View {
 
     private func messageLine(_ message: ChatMessage) -> some View {
         Group {
-            if message.role == .system {
+            if message.role == .system && message.content.hasPrefix("Remembered:") {
+                HStack(spacing: screenSize.width * 0.01) {
+                    Text("*")
+                        .font(.system(size: bodyFontSize * 0.8, weight: .bold, design: .monospaced))
+                        .foregroundStyle(PetPalette.bodyMain)
+                    Text(message.content)
+                        .font(.system(size: bodyFontSize * 0.8, weight: .medium, design: .monospaced))
+                        .foregroundStyle(PetPalette.bodyMain)
+                }
+                .frame(maxWidth: .infinity, alignment: .center)
+            } else if message.role == .system {
                 Text(message.content)
                     .font(.system(size: bodyFontSize * 0.8, weight: .medium, design: .monospaced))
                     .italic()
@@ -294,3 +317,4 @@ private struct PixelSendArrow: View {
         )
     }
 }
+

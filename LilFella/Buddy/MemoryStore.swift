@@ -2,6 +2,7 @@ import Foundation
 
 actor MemoryStore {
     private static let maxFacts = 30
+    private static let compactionThreshold = 25
     private static let maxFactLength = 100
 
     private let fileURL: URL
@@ -59,11 +60,38 @@ actor MemoryStore {
         return facts
     }
 
+    var needsCompaction: Bool {
+        facts.count >= Self.compactionThreshold
+    }
+
     func deleteFact(at index: Int) {
         guard facts.indices.contains(index) else { return }
         facts.remove(at: index)
         guard let data = try? JSONEncoder().encode(facts) else { return }
         try? data.write(to: fileURL, options: .atomic)
+    }
+
+    static func compactionPrompt(from facts: [String]) -> String {
+        let factList = facts.enumerated().map { "\($0.offset + 1). \($0.element)" }.joined(separator: "\n")
+
+        return """
+        Consolidate these memory facts about a user into a shorter list.
+        Merge related facts (e.g. multiple game results into one summary).
+        Keep important unique facts. Drop trivial or redundant ones.
+        Return ONLY a JSON array of short fact strings. Target 15 or fewer facts.
+
+        Current facts:
+        \(factList)
+
+        Consolidated JSON array:
+        """
+    }
+
+    func replaceAll(with newFacts: [String]) {
+        let filtered = newFacts
+            .map { String($0.prefix(Self.maxFactLength)) }
+            .filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
+        save(filtered)
     }
 
     static func extractionPrompt(from conversation: [ChatMessage]) -> String {
