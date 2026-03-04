@@ -5,6 +5,7 @@ struct PetSceneView: View {
     @State private var animationState = PetAnimationState()
     @State private var viewModel: ChatViewModel?
     @State private var showClearConfirmation = false
+    @FocusState private var isInputFocused: Bool
 
     var body: some View {
         if let viewModel {
@@ -16,7 +17,7 @@ struct PetSceneView: View {
                     updateAnimationState(viewModel: viewModel)
                 }
                 .task {
-                    await viewModel.loadPersistedState()
+                    await viewModel.loadMemoriesOnly()
                 }
         } else {
             Color.clear.onAppear {
@@ -33,35 +34,36 @@ struct PetSceneView: View {
     private func sceneContent(viewModel: ChatViewModel) -> some View {
         GeometryReader { geo in
             VStack(spacing: 0) {
-                // Top spacing (~5%)
-                Spacer()
-                    .frame(height: geo.size.height * 0.05)
+                // 1. Conversation box at the top
+                ConversationBoxView(viewModel: viewModel, screenSize: geo.size)
+                    .padding(.horizontal, geo.size.width * 0.03)
+                    .padding(.top, geo.size.height * 0.005)
 
-                // Environment + Character (~60%)
+                // 2. Lil Fella character in the middle
                 ZStack(alignment: .bottom) {
                     PixelEnvironmentView(screenHeight: geo.size.height)
 
                     if let gameVM = viewModel.activeGame, gameVM.isActive {
-                        // Game mode: board in center, character to the side
                         gameLayout(viewModel: viewModel, gameVM: gameVM, geo: geo)
                     } else {
-                        // Normal mode: character centered
                         normalCharacterLayout(geo: geo)
                     }
                 }
-                .frame(height: geo.size.height * 0.60)
+                .frame(height: geo.size.height * 0.22)
 
-                // Dialogue Box (~35%)
-                DialogueBoxView(viewModel: viewModel, screenSize: geo.size, onNewChat: {
+                // 3. Input bar at the bottom (just above keyboard)
+                InputBarView(viewModel: viewModel, screenSize: geo.size, onNewChat: {
                     showClearConfirmation = true
-                })
+                }, isInputFocused: $isInputFocused)
                     .padding(.horizontal, geo.size.width * 0.03)
-                    .padding(.top, geo.size.height * 0.005)
-                    .padding(.bottom, geo.size.height * 0.01)
-                    .frame(height: geo.size.height * 0.35)
+                    .padding(.bottom, geo.size.height * 0.005)
             }
         }
         .background(PetPalette.skyTop)
+        .onAppear {
+            UITextField.appearance().keyboardAppearance = .light
+            isInputFocused = true
+        }
         .confirmationDialog("Start a new chat?", isPresented: $showClearConfirmation) {
             Button("New Chat", role: .destructive) {
                 viewModel.dismissGame()
@@ -90,14 +92,13 @@ struct PetSceneView: View {
                 }
             }
         }
-        .padding(.bottom, geo.size.height * 0.025)
+        .padding(.bottom, geo.size.height * 0.01)
     }
 
     // MARK: - Game Layout
 
     private func gameLayout(viewModel: ChatViewModel, gameVM: TicTacToeViewModel, geo: GeometryProxy) -> some View {
         HStack(alignment: .bottom, spacing: 0) {
-            // Character scaled down on the left
             VStack(spacing: 0) {
                 if animationState.state == .thinking {
                     ThinkingDotsView(pixelSize: smallPixelSize(for: geo.size))
@@ -116,8 +117,7 @@ struct PetSceneView: View {
             .frame(width: geo.size.width * 0.25)
             .padding(.bottom, geo.size.height * 0.015)
 
-            // Game board in the center-right area
-            let boardSize = min(geo.size.width * 0.6, geo.size.height * 0.45)
+            let boardSize = min(geo.size.width * 0.5, geo.size.height * 0.2)
             TicTacToeBoardView(
                 game: gameVM.game,
                 onCellTap: { index in
@@ -125,7 +125,7 @@ struct PetSceneView: View {
                 },
                 size: boardSize
             )
-            .padding(.bottom, geo.size.height * 0.04)
+            .padding(.bottom, geo.size.height * 0.02)
             .padding(.trailing, geo.size.width * 0.05)
         }
     }
@@ -133,13 +133,12 @@ struct PetSceneView: View {
     // MARK: - Sizing
 
     private func pixelSize(for screenSize: CGSize) -> CGFloat {
-        let fromWidth = screenSize.width * 0.38 / 20
-        let fromHeight = screenSize.height * 0.22 / 16
+        let fromWidth = screenSize.width * 0.30 / 20
+        let fromHeight = screenSize.height * 0.18 / 16
         return min(fromWidth, fromHeight)
     }
 
     private func smallPixelSize(for screenSize: CGSize) -> CGFloat {
-        // ~60% of normal size for game mode
         return pixelSize(for: screenSize) * 0.6
     }
 
@@ -154,4 +153,3 @@ struct PetSceneView: View {
         animationState.frameIndex = 0
     }
 }
-

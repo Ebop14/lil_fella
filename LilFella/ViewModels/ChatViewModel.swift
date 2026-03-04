@@ -46,6 +46,11 @@ final class ChatViewModel {
         }
     }
 
+    func loadMemoriesOnly() async {
+        memories = await memoryStore.load()
+        await conversationStore.clear()
+    }
+
     func send() {
         let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty, !isGenerating else { return }

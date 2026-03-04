@@ -4,18 +4,12 @@ struct PixelEnvironmentView: View {
     let screenHeight: CGFloat
 
     var body: some View {
-        ZStack(alignment: .bottom) {
-            // Sky gradient
-            LinearGradient(
-                colors: [PetPalette.skyTop, PetPalette.skyBottom],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-
-            // Pixelated grass strip (~4% of screen height)
-            GrassView(screenWidth: screenHeight)
-                .frame(height: screenHeight * 0.04)
-        }
+        // Sky gradient
+        LinearGradient(
+            colors: [PetPalette.skyTop, PetPalette.skyBottom],
+            startPoint: .top,
+            endPoint: .bottom
+        )
     }
 }
 

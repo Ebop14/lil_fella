@@ -1,12 +1,11 @@
 import SwiftUI
 
-struct DialogueBoxView: View {
+// MARK: - Conversation Display Box (top section)
+
+struct ConversationBoxView: View {
     @Bindable var viewModel: ChatViewModel
     let screenSize: CGSize
-    var onNewChat: (() -> Void)?
-    @FocusState private var isInputFocused: Bool
 
-    @State private var isInputMode = false
     @State private var dotCount = 0
 
     private let dotTimer = Timer.publish(every: 0.4, on: .main, in: .common).autoconnect()
@@ -18,15 +17,19 @@ struct DialogueBoxView: View {
     private var contentPadH: CGFloat { screenSize.width * 0.04 }
     private var contentPadV: CGFloat { screenSize.height * 0.012 }
     private var bodyFontSize: CGFloat { screenSize.width * 0.04 }
-    private var labelFontSize: CGFloat { screenSize.width * 0.03 }
+    private var nameplateFontSize: CGFloat { screenSize.width * 0.038 }
 
     var body: some View {
-        VStack(spacing: 0) {
+        VStack(spacing: screenSize.height * 0.008) {
             // Nameplate tab
-            nameplate
+            HStack {
+                nameplatePill("Lil Fella")
+                Spacer()
+            }
+            .padding(.horizontal, contentPadH)
 
             // Main box
-            ZStack(alignment: .bottom) {
+            ZStack {
                 // Double border
                 RoundedRectangle(cornerRadius: cornerRadius)
                     .fill(PetPalette.borderOuter)
@@ -37,40 +40,19 @@ struct DialogueBoxView: View {
                     .fill(PetPalette.boxFill)
                     .padding(borderOuter + borderInner)
 
-                // Always show conversation or welcome
-                VStack(spacing: 0) {
-                    displayContent
+                // Conversation content
+                if !viewModel.messages.isEmpty || viewModel.isGenerating {
+                    conversationScroll
                         .padding(.horizontal, contentPadH)
-                        .padding(.top, contentPadV)
-                        .padding(.bottom, isInputMode ? 0 : contentPadV)
-
-                    // Input bar at bottom when active
-                    if isInputMode {
-                        inputBar
-                            .padding(.horizontal, contentPadH)
-                            .padding(.bottom, contentPadV)
-                    }
+                        .padding(.vertical, contentPadV)
+                } else {
+                    Text("...")
+                        .font(.system(size: bodyFontSize, weight: .regular, design: .monospaced))
+                        .foregroundStyle(PetPalette.textColor.opacity(0.4))
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
             }
         }
-    }
-
-    // MARK: - Nameplate
-
-    private var nameplateFontSize: CGFloat { screenSize.width * 0.038 }
-
-    private var nameplate: some View {
-        HStack {
-            nameplatePill(nameplateText)
-            Spacer()
-            if let onNewChat {
-                Button(action: onNewChat) {
-                    nameplatePill("New")
-                }
-            }
-        }
-        .padding(.leading, contentPadH)
-        .padding(.trailing, contentPadH)
     }
 
     private func nameplatePill(_ text: String) -> some View {
@@ -87,87 +69,47 @@ struct DialogueBoxView: View {
                             .stroke(PetPalette.borderOuter, lineWidth: borderOuter * 0.7)
                     )
             )
-            .offset(y: screenSize.height * 0.007)
     }
 
-    private var nameplateText: String {
-        isInputMode ? "You" : "Lil Fella"
-    }
-
-    // MARK: - Display Content
-
-    @ViewBuilder
-    private var displayContent: some View {
-        if viewModel.messages.isEmpty && !viewModel.isGenerating {
-            welcomeText
-        } else {
-            conversationScroll
-        }
-    }
+    // MARK: - Conversation Scroll
 
     private var conversationScroll: some View {
         ScrollViewReader { proxy in
-            ZStack(alignment: .topTrailing) {
-                ScrollView {
-                    VStack(alignment: .leading, spacing: screenSize.height * 0.008) {
-                        ForEach(viewModel.messages) { message in
-                            messageLine(message)
-                                .id(message.id)
-                        }
+            ScrollView {
+                LazyVStack(alignment: .leading, spacing: 0) {
+                    ForEach(viewModel.messages) { message in
+                        messageLine(message)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.vertical, screenSize.height * 0.006)
+                            .id(message.id)
+                    }
 
-                        // Currently streaming or thinking
-                        if viewModel.isGenerating {
-                            if viewModel.currentStreamedText.isEmpty {
-                                thinkingDots
-                                    .id("streaming")
-                            } else {
-                                Text(viewModel.currentStreamedText)
-                                    .font(.system(size: bodyFontSize, weight: .regular, design: .monospaced))
-                                    .foregroundStyle(PetPalette.textColor)
-                                    .frame(maxWidth: .infinity, alignment: .leading)
-                                    .id("streaming")
-                            }
+                    if viewModel.isGenerating {
+                        if viewModel.currentStreamedText.isEmpty {
+                            thinkingDots
+                                .padding(.vertical, screenSize.height * 0.006)
+                                .id("streaming")
+                        } else {
+                            Text(viewModel.currentStreamedText)
+                                .font(.system(size: bodyFontSize, weight: .regular, design: .monospaced))
+                                .foregroundStyle(PetPalette.textColor)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.vertical, screenSize.height * 0.006)
+                                .id("streaming")
                         }
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
                 }
-                .onChange(of: viewModel.currentStreamedText) { _, _ in
-                    proxy.scrollTo("streaming", anchor: .bottom)
-                }
-                .onChange(of: viewModel.messages.count) { _, _ in
-                    if let last = viewModel.messages.last {
-                        proxy.scrollTo(last.id, anchor: .bottom)
-                    }
-                }
-
-                // Scroll arrows
-                if viewModel.messages.count > 1 {
-                    VStack(spacing: screenSize.height * 0.005) {
-                        Button {
-                            withAnimation {
-                                if let first = viewModel.messages.first {
-                                    proxy.scrollTo(first.id, anchor: .top)
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "chevron.up")
-                                .font(.system(size: bodyFontSize * 0.8, weight: .bold))
-                                .foregroundStyle(PetPalette.borderOuter)
-                        }
-
-                        Button {
-                            withAnimation {
-                                if let last = viewModel.messages.last {
-                                    proxy.scrollTo(last.id, anchor: .bottom)
-                                }
-                            }
-                        } label: {
-                            Image(systemName: "chevron.down")
-                                .font(.system(size: bodyFontSize * 0.8, weight: .bold))
-                                .foregroundStyle(PetPalette.borderOuter)
-                        }
-                    }
-                    .padding(screenSize.width * 0.01)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .scrollTargetLayout()
+            }
+            .scrollTargetBehavior(.viewAligned)
+            .scrollDismissesKeyboard(.never)
+            .onChange(of: viewModel.currentStreamedText) { _, _ in
+                proxy.scrollTo("streaming", anchor: .bottom)
+            }
+            .onChange(of: viewModel.messages.count) { _, _ in
+                if let last = viewModel.messages.last {
+                    proxy.scrollTo(last.id, anchor: .bottom)
                 }
             }
         }
@@ -175,11 +117,6 @@ struct DialogueBoxView: View {
         .onTapGesture {
             if viewModel.isGenerating {
                 viewModel.stopGenerating()
-            } else if !isInputMode {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isInputMode = true
-                }
-                isInputFocused = true
             }
         }
     }
@@ -226,25 +163,41 @@ struct DialogueBoxView: View {
                 dotCount = (dotCount + 1) % 3
             }
     }
+}
 
-    private var welcomeText: some View {
-        Text("* Tap here to talk *")
-            .font(.system(size: bodyFontSize, weight: .regular, design: .monospaced))
-            .foregroundStyle(PetPalette.textColor.opacity(0.6))
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .contentShape(Rectangle())
-            .onTapGesture {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isInputMode = true
-                }
-                isInputFocused = true
-            }
-    }
+// MARK: - Input Bar (bottom section, above keyboard)
 
-    // MARK: - Input Bar
+struct InputBarView: View {
+    @Bindable var viewModel: ChatViewModel
+    let screenSize: CGSize
+    var onNewChat: (() -> Void)?
+    @FocusState.Binding var isInputFocused: Bool
 
-    private var inputBar: some View {
+    private var bodyFontSize: CGFloat { screenSize.width * 0.04 }
+    private var borderWidth: CGFloat { screenSize.width * 0.005 }
+
+    var body: some View {
         HStack(alignment: .bottom, spacing: screenSize.width * 0.02) {
+            // New Chat button
+            if let onNewChat {
+                Button(action: onNewChat) {
+                    Text("New")
+                        .font(.system(size: bodyFontSize * 0.8, weight: .bold, design: .monospaced))
+                        .foregroundStyle(PetPalette.borderOuter)
+                        .padding(.horizontal, screenSize.width * 0.02)
+                        .padding(.vertical, screenSize.height * 0.005)
+                        .background(
+                            Rectangle()
+                                .fill(PetPalette.boxFill)
+                                .overlay(
+                                    Rectangle()
+                                        .stroke(PetPalette.borderOuter, lineWidth: borderWidth)
+                                )
+                        )
+                }
+            }
+
+            // Text field
             TextField("Say something...", text: $viewModel.inputText, axis: .vertical)
                 .font(.system(size: bodyFontSize, weight: .regular, design: .monospaced))
                 .foregroundStyle(PetPalette.textColor)
@@ -252,29 +205,32 @@ struct DialogueBoxView: View {
                 .focused($isInputFocused)
                 .lineLimit(1...3)
                 .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, screenSize.width * 0.03)
+                .padding(.vertical, screenSize.height * 0.008)
+                .background(
+                    Rectangle()
+                        .fill(PetPalette.boxFill)
+                        .overlay(
+                            Rectangle()
+                                .stroke(PetPalette.borderOuter, lineWidth: borderWidth)
+                        )
+                )
                 .onSubmit {
                     sendMessage()
                 }
 
+            // Send button
             Button(action: sendMessage) {
-                PixelSendArrow(size: screenSize.width * 0.08)
+                PixelSendArrow(size: screenSize.width * 0.075)
             }
             .disabled(viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-        }
-        .onChange(of: isInputFocused) { _, focused in
-            if !focused {
-                withAnimation(.easeInOut(duration: 0.15)) {
-                    isInputMode = false
-                }
-            }
         }
     }
 
     private func sendMessage() {
         guard !viewModel.inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
-        isInputFocused = false
-        isInputMode = false
         viewModel.send()
+        isInputFocused = true
     }
 }
 
@@ -317,4 +273,3 @@ private struct PixelSendArrow: View {
         )
     }
 }
-
