@@ -1,5 +1,8 @@
 import Foundation
 import SwiftUI
+import os.log
+
+private let log = Logger(subsystem: "com.lilfella", category: "ChatViewModel")
 
 @Observable
 @MainActor
@@ -43,12 +46,14 @@ final class ChatViewModel {
         let saved = await conversationStore.load()
         if !saved.isEmpty {
             messages = saved
+            log.info("Loaded \(saved.count) persisted messages and \(self.memories.count) memories")
         }
     }
 
     func loadMemoriesOnly() async {
         memories = await memoryStore.load()
         await conversationStore.clear()
+        log.info("Loaded \(self.memories.count) memories, cleared conversation")
     }
 
     func send() {
@@ -58,6 +63,7 @@ final class ChatViewModel {
         inputText = ""
         let userMessage = ChatMessage(role: .user, content: text)
         messages.append(userMessage)
+        log.info("User message: \(text.prefix(80))... (total messages: \(self.messages.count))")
 
         // Check for game trigger
         if detectGameTrigger(text) {
@@ -71,11 +77,23 @@ final class ChatViewModel {
         tokensPerSecond = 0
 
         generateTask = Task {
+            // Truncate conversation to fit context window
+            let truncatedMessages = await truncateToFitContext(messages: messages)
+            if truncatedMessages.count < messages.count {
+                let dropped = messages.count - truncatedMessages.count
+                log.info("Truncated \(dropped) old messages to fit context window")
+            }
+
             let prompt = ChatMLFormatter.format(
-                messages: messages,
+                messages: truncatedMessages,
                 identity: buddy,
                 memories: memories
             )
+
+            log.info("Formatted prompt: \(prompt.count) chars")
+            let promptTokenCount = await llamaService.tokenCount(for: prompt)
+            let ctxLimit = await llamaService.availableContextLength
+            log.info("Prompt token count: \(promptTokenCount), context limit: \(ctxLimit)")
 
             let startTime = Date()
             var tokenCount = 0
@@ -92,6 +110,7 @@ final class ChatViewModel {
                 if scanResult.memoryFacts.count > processedFactCount {
                     let newFacts = Array(scanResult.memoryFacts[processedFactCount...])
                     processedFactCount = scanResult.memoryFacts.count
+                    log.info("New memory facts detected: \(newFacts)")
                     await processMemorySave(facts: newFacts)
                 }
 
@@ -101,6 +120,9 @@ final class ChatViewModel {
                     tokensPerSecond = Double(tokenCount) / elapsed
                 }
             }
+
+            let elapsed = Date().timeIntervalSince(startTime)
+            log.info("Generation complete: \(tokenCount) tokens in \(String(format: "%.1f", elapsed))s (\(String(format: "%.1f", self.tokensPerSecond)) t/s)")
 
             // Final scan for any remaining tool calls
             let finalScan = ToolCallParser.scan(rawStreamBuffer)
@@ -113,6 +135,10 @@ final class ChatViewModel {
             if !finalText.isEmpty {
                 let assistantMessage = ChatMessage(role: .assistant, content: finalText)
                 messages.append(assistantMessage)
+                log.info("Assistant response: \(finalText.prefix(80))...")
+            } else {
+                log.warning("Generation produced empty response after stripping think tags")
+                log.debug("Raw stream buffer was: \(self.rawStreamBuffer.prefix(200))")
             }
 
             currentStreamedText = ""
@@ -126,7 +152,54 @@ final class ChatViewModel {
         }
     }
 
+    /// Truncate older messages so the prompt fits within the context window.
+    /// Always keeps the most recent user message and as many recent messages as fit.
+    private func truncateToFitContext(messages: [ChatMessage]) async -> [ChatMessage] {
+        let contextLimit = Int(await llamaService.availableContextLength)
+        // Reserve tokens for generation output
+        let reserveForGeneration = Int(samplingConfig.maxTokens / 2)
+        let maxPromptTokens = contextLimit - reserveForGeneration
+
+        guard maxPromptTokens > 0 else {
+            log.error("Context too small for any generation (limit: \(contextLimit), reserve: \(reserveForGeneration))")
+            return messages
+        }
+
+        // First, try with all messages
+        let fullPrompt = ChatMLFormatter.format(messages: messages, identity: buddy, memories: memories)
+        let fullTokens = await llamaService.tokenCount(for: fullPrompt)
+
+        if fullTokens <= maxPromptTokens {
+            return messages
+        }
+
+        log.warning("Full prompt (\(fullTokens) tokens) exceeds budget (\(maxPromptTokens) tokens), truncating")
+
+        // Binary search: keep removing oldest non-system messages until it fits
+        // Always keep the system messages and at least the last user message
+        var truncated = messages
+        while truncated.count > 1 {
+            // Remove the oldest non-system message
+            if let firstNonSystemIdx = truncated.firstIndex(where: { $0.role != .system }) {
+                truncated.remove(at: firstNonSystemIdx)
+            } else {
+                break
+            }
+
+            let prompt = ChatMLFormatter.format(messages: truncated, identity: buddy, memories: memories)
+            let tokenCount = await llamaService.tokenCount(for: prompt)
+            if tokenCount <= maxPromptTokens {
+                log.info("Truncated to \(truncated.count) messages (\(tokenCount) tokens)")
+                return truncated
+            }
+        }
+
+        log.error("Could not fit even a single message in context window!")
+        return [messages.last!]
+    }
+
     func stopGenerating() {
+        log.info("Stop generating requested")
         Task {
             await llamaService.cancelGeneration()
         }
@@ -155,6 +228,7 @@ final class ChatViewModel {
     }
 
     func clearConversation() {
+        log.info("Clearing conversation (\(self.messages.count) messages)")
         // Extract memories before clearing (fallback for models that don't use tool calls)
         if messages.count >= 4 {
             let conversationMessages = messages
@@ -187,6 +261,7 @@ final class ChatViewModel {
         let isGameRequest = Self.gameTriggerPatterns.contains { lower.contains($0) }
         guard isGameRequest else { return false }
 
+        log.info("Game trigger detected")
         let gameVM = TicTacToeViewModel(
             llamaService: llamaService,
             buddy: buddy,
@@ -223,6 +298,7 @@ final class ChatViewModel {
 
     private func processMemorySave(facts: [String]) async {
         guard !facts.isEmpty else { return }
+        log.info("Saving \(facts.count) memory facts")
         await memoryStore.merge(newFacts: facts)
         memories = await memoryStore.currentFacts()
 
@@ -231,6 +307,7 @@ final class ChatViewModel {
 
         // Compact memory if getting full (run in background, non-blocking)
         if await memoryStore.needsCompaction {
+            log.info("Memory needs compaction (\(self.memories.count) facts)")
             Task { await compactMemories() }
         }
     }
@@ -239,6 +316,7 @@ final class ChatViewModel {
         let currentFacts = await memoryStore.currentFacts()
         guard currentFacts.count >= 20 else { return }
 
+        log.info("Starting memory compaction with \(currentFacts.count) facts")
         let prompt = MemoryStore.compactionPrompt(from: currentFacts)
         let compactionSampling = SamplingConfig(
             temperature: 0.1,
@@ -268,10 +346,17 @@ final class ChatViewModel {
         timeoutTask.cancel()
         await llamaService.clearContext()
 
-        guard let compacted = parseFactsJSON(response), !compacted.isEmpty else { return }
+        guard let compacted = parseFactsJSON(response), !compacted.isEmpty else {
+            log.warning("Memory compaction produced no valid output")
+            return
+        }
         // Only accept if we actually reduced the count
-        guard compacted.count < currentFacts.count else { return }
+        guard compacted.count < currentFacts.count else {
+            log.info("Compaction didn't reduce facts (\(compacted.count) >= \(currentFacts.count)), keeping originals")
+            return
+        }
 
+        log.info("Memory compacted: \(currentFacts.count) -> \(compacted.count) facts")
         await memoryStore.replaceAll(with: compacted)
         memories = await memoryStore.currentFacts()
     }
@@ -279,6 +364,7 @@ final class ChatViewModel {
     // MARK: - Fallback Memory Extraction
 
     private func extractMemories(from conversation: [ChatMessage]) async {
+        log.info("Extracting memories from \(conversation.count) messages")
         let prompt = MemoryStore.extractionPrompt(from: conversation)
 
         let extractionSampling = SamplingConfig(
@@ -309,9 +395,16 @@ final class ChatViewModel {
         timeoutTask.cancel()
         await llamaService.clearContext()
 
-        guard let facts = parseFactsJSON(response) else { return }
-        guard !facts.isEmpty else { return }
+        guard let facts = parseFactsJSON(response) else {
+            log.warning("Memory extraction produced no valid JSON")
+            return
+        }
+        guard !facts.isEmpty else {
+            log.info("Memory extraction found no new facts")
+            return
+        }
 
+        log.info("Extracted \(facts.count) facts from conversation")
         await memoryStore.merge(newFacts: facts)
         memories = await memoryStore.currentFacts()
 
